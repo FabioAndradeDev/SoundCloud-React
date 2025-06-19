@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import type { User } from '../types';
+import api from '../utils/api'; // Importa nossa instância do axios
+import { jwtDecode } from 'jwt-decode'; // Importa a função para decodificar o token
 
 /**
  * @type AuthContextType
@@ -43,54 +45,87 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
 
   /**
-   * Efeito que roda uma vez na inicialização para verificar se há um usuário
+   * Efeito que roda uma vez na inicialização para verificar se há um token
    * salvo no localStorage e restaurar a sessão.
    */
   useEffect(() => {
     try {
-      const storedUser = localStorage.getItem('user');
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
+      const token = localStorage.getItem('token');
+      if (token) {
+        // Se tivermos um endpoint para buscar dados do usuário, chamaríamos ele aqui.
+        // Por agora, vamos criar um usuário a partir do token.
+        const decodedToken: { sub: string } = jwtDecode(token);
+        const userFromToken: User = {
+            id: decodedToken.sub, // Usando o email/login como ID por enquanto
+            username: decodedToken.sub.split('@')[0], // Deriva um username
+            email: decodedToken.sub,
+            avatarUrl: `https://i.pravatar.cc/150?u=${decodedToken.sub}`,
+            // Preenchendo o resto dos campos obrigatórios
+            followers: 0,
+            following: 0,
+            playlists: [],
+            likedSongs: [],
+            likedPlaylists: [],
+            likedArtists: [],
+        };
+        setUser(userFromToken);
+        // O token já está no localStorage, não precisamos fazer nada
       }
     } catch (error) {
-      console.error('Falha ao carregar usuário do localStorage:', error);
-      localStorage.removeItem('user');
+      console.error('Falha ao processar token do localStorage:', error);
+      localStorage.removeItem('token');
     }
   }, []);
 
   /**
-   * Função de login.
-   * Simula a autenticação e salva o usuário no estado e no localStorage.
+   * Função de login real.
+   * Autentica na API, salva o token e atualiza o estado do usuário.
    */
   const login = async (email: string, password: string) => {
-    console.log('Tentativa de login com:', { email, password });
-    if (!email || !password) {
-      throw new Error('Email e senha são obrigatórios.');
+    try {
+        const response = await api.post('/auth/login', { login: email, password });
+        const { token } = response.data;
+
+        if (token) {
+            localStorage.setItem('token', token);
+            api.defaults.headers.common['Authorization'] = `Bearer ${token}`; // Configura o header para futuras requisições
+
+            const decodedToken: { sub: string } = jwtDecode(token);
+            // Idealmente, você faria uma chamada para buscar os dados completos do usuário
+            // ex: const { data: userData } = await api.get(`/users/${decodedToken.sub}`);
+            // Mas por agora, vamos montar o objeto do usuário a partir do token:
+            const authenticatedUser: User = {
+                id: decodedToken.sub,
+                username: decodedToken.sub.split('@')[0],
+                email: decodedToken.sub,
+                avatarUrl: `https://i.pravatar.cc/150?u=${decodedToken.sub}`,
+                followers: 0,
+                following: 0,
+                playlists: [],
+                likedSongs: [],
+                likedPlaylists: [],
+                likedArtists: [],
+            };
+
+            setUser(authenticatedUser);
+        } else {
+            throw new Error('Token não encontrado na resposta da API');
+        }
+    } catch (error) {
+        console.error('Falha no login:', error);
+        // Re-lança o erro para que a página de login possa exibi-lo
+        throw error;
     }
-    // Lógica de autenticação simulada
-    const mockUser: User = {
-      id: `user-${Date.now()}`,
-      username: 'Usuário Logado',
-      email: email,
-      avatarUrl: 'https://i.pravatar.cc/150?u=loggeduser',
-      followers: 123,
-      following: 45,
-      playlists: [],
-      likedSongs: [],
-      likedPlaylists: [],
-      likedArtists: [],
-    };
-    setUser(mockUser);
-    localStorage.setItem('user', JSON.stringify(mockUser));
   };
 
   /**
    * Função de logout.
-   * Limpa os dados do usuário do estado e do localStorage.
+   * Limpa o estado, o localStorage e os headers da API.
    */
   const logout = () => {
     setUser(null);
-    localStorage.removeItem('user');
+    localStorage.removeItem('token');
+    delete api.defaults.headers.common['Authorization'];
   };
 
   /**

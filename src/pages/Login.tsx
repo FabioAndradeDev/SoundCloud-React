@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-// import { useAuth } from '../contexts/AuthContext'; // Vamos substituir pelo nosso serviço de API por enquanto
-import api from '../utils/api';
+import { useAuth } from '../contexts/AuthContext'; // Importamos o hook do nosso contexto
 
 export default function Login() {
   const [email, setEmail] = useState(''); // Mantemos 'email' para o formulário, mas enviaremos como 'login'
@@ -9,7 +8,7 @@ export default function Login() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
-  // const { login } = useAuth(); // Removido
+  const { login } = useAuth(); // Usamos a função login do contexto
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -17,27 +16,17 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      // O backend espera 'login', então usamos o valor do state 'email'
-      const response = await api.post('/auth/login', {
-        login: email,
-        password: password
-      });
-
-      console.log('Login bem-sucedido!', response.data);
-
-      // Aqui você lidaria com o token. Exemplo:
-      // if (response.data.token) {
-      //   localStorage.setItem('token', response.data.token);
-      // }
-
-      // await login(email, password); // Removido
-      navigate('/app/home', { replace: true }); // Redireciona para a home
+      // O contexto agora cuida de toda a lógica da API
+      await login(email, password); 
+      
+      // Se a função login for bem-sucedida, o PrivateRoute nos deixará passar
+      navigate('/app/home', { replace: true });
     } catch (err: any) {
-      // Tratamento de erro aprimorado para pegar a mensagem da API
+      // O erro é re-lançado pelo contexto, então podemos pegá-lo aqui
       if (err.response && err.response.data) {
         setError(err.response.data.message || 'Falha no login. Verifique suas credenciais.');
       } else {
-        setError('Não foi possível conectar ao servidor. Tente novamente mais tarde.');
+        setError('Falha no login. Verifique suas credenciais.');
       }
       console.error(err);
     } finally {
